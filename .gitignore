@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Environment files (do not commit sensitive info)
+.env
