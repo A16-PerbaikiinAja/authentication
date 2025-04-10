@@ -1,5 +1,20 @@
 package id.ac.ui.cs.advprog.authentication.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.bcrypt.BCrypt;
+
 import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
 import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
 import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
@@ -11,14 +26,6 @@ import id.ac.ui.cs.advprog.authentication.repository.AdminRepository;
 import id.ac.ui.cs.advprog.authentication.repository.TechnicianRepository;
 import id.ac.ui.cs.advprog.authentication.repository.UserRepository;
 import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.crypto.bcrypt.BCrypt;
-import java.util.Optional;
-import java.util.UUID;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 class AuthenticationServiceImplTest {
 
@@ -43,10 +50,11 @@ class AuthenticationServiceImplTest {
         String rawPassword = "admin123";
         String hashedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
         Admin admin = new Admin("Default Admin", email, "1234567890", hashedPassword);
-        admin.setId(UUID.randomUUID());
+        UUID adminId = UUID.randomUUID();
+        admin.setId(adminId);
 
         when(adminRepository.findByEmail(email)).thenReturn(Optional.of(admin));
-        when(jwtTokenProvider.generateToken(email, "ADMIN")).thenReturn("dummy-admin-token");
+        when(jwtTokenProvider.generateToken(adminId.toString(), "ADMIN")).thenReturn("dummy-admin-token");
 
         AuthRequest request = new AuthRequest();
         request.setEmail(email);
@@ -63,11 +71,12 @@ class AuthenticationServiceImplTest {
         String rawPassword = "techpass";
         String hashedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
         Technician tech = new Technician("Tech Name", email, "9876543210", hashedPassword, 5, "Address", 0, 0.0);
-        tech.setId(UUID.randomUUID());
+        UUID techId = UUID.randomUUID();
+        tech.setId(techId);
 
         when(adminRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(technicianRepository.findByEmail(email)).thenReturn(Optional.of(tech));
-        when(jwtTokenProvider.generateToken(email, "TECHNICIAN")).thenReturn("dummy-tech-token");
+        when(jwtTokenProvider.generateToken(techId.toString(), "TECHNICIAN")).thenReturn("dummy-tech-token");
 
         AuthRequest request = new AuthRequest();
         request.setEmail(email);
@@ -84,12 +93,13 @@ class AuthenticationServiceImplTest {
         String rawPassword = "userpass";
         String hashedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
         User user = new User("User Name", email, "1112223333", hashedPassword, "User Address");
-        user.setId(UUID.randomUUID());
+        UUID userId = UUID.randomUUID();
+        user.setId(userId);
 
         when(adminRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(technicianRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
-        when(jwtTokenProvider.generateToken(email, "USER")).thenReturn("dummy-user-token");
+        when(jwtTokenProvider.generateToken(userId.toString(), "USER")).thenReturn("dummy-user-token");
 
         AuthRequest request = new AuthRequest();
         request.setEmail(email);

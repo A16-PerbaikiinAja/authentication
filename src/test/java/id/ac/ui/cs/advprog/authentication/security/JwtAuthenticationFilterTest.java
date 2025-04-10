@@ -1,17 +1,25 @@
 package id.ac.ui.cs.advprog.authentication.security;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.io.IOException;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.security.core.context.SecurityContextHolder;
-import java.io.IOException;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 class JwtAuthenticationFilterTest {
 
@@ -22,7 +30,7 @@ class JwtAuthenticationFilterTest {
     void setUp() {
         jwtTokenProvider = Mockito.mock(JwtTokenProvider.class);
         when(jwtTokenProvider.validateToken("valid-token")).thenReturn(true);
-        when(jwtTokenProvider.getEmailFromJWT("valid-token")).thenReturn("test@example.com");
+        when(jwtTokenProvider.getUserIdFromJWT("valid-token")).thenReturn("test-uuid");
         when(jwtTokenProvider.getRoleFromJWT("valid-token")).thenReturn("ADMIN");
         jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtTokenProvider);
     }
@@ -44,7 +52,7 @@ class JwtAuthenticationFilterTest {
 
         verify(filterChain, times(1)).doFilter(request, response);
         assertNotNull(SecurityContextHolder.getContext().getAuthentication(), "Authentication should be set in the SecurityContext");
-        assertEquals("test@example.com", SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        assertEquals("test-uuid", SecurityContextHolder.getContext().getAuthentication().getPrincipal());
     }
 
     @Test

@@ -1,9 +1,14 @@
 package id.ac.ui.cs.advprog.authentication.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
-import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
-import id.ac.ui.cs.advprog.authentication.service.ProfileService;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,13 +19,11 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
+import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
+import id.ac.ui.cs.advprog.authentication.service.ProfileService;
 
 @WebMvcTest(ProfileController.class)
 @Import(id.ac.ui.cs.advprog.authentication.config.SecurityConfig.class)
@@ -39,7 +42,7 @@ class ProfileControllerTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @WithMockUser(username = "user@example.com", roles = {"USER"})
+    @WithMockUser(username = "00000000-0000-0000-0000-000000000003", roles = {"USER"})
     void testUpdateProfile_UserSuccess() throws Exception {
         ProfileUpdateDto dto = new ProfileUpdateDto();
         dto.setFullName("Updated User");
@@ -54,7 +57,7 @@ class ProfileControllerTest {
         updatedUser.setId(userId);
         updatedUser.setProfilePhoto("updated-user.png");
 
-        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("user@example.com"), eq("USER")))
+        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("00000000-0000-0000-0000-000000000003"), eq("USER")))
                 .thenReturn(updatedUser);
 
         mockMvc.perform(put("/profile")
@@ -68,7 +71,7 @@ class ProfileControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "tech@example.com", roles = {"TECHNICIAN"})
+    @WithMockUser(username = "00000000-0000-0000-0000-000000000004", roles = {"TECHNICIAN"})
     void testUpdateProfile_TechnicianSuccess() throws Exception {
         ProfileUpdateDto dto = new ProfileUpdateDto();
         dto.setFullName("Updated Tech");
@@ -84,7 +87,7 @@ class ProfileControllerTest {
         updatedTech.setId(techId);
         updatedTech.setProfilePhoto("updated-tech.png");
 
-        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("tech@example.com"), eq("TECHNICIAN")))
+        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("00000000-0000-0000-0000-000000000004"), eq("TECHNICIAN")))
                 .thenReturn(updatedTech);
 
         mockMvc.perform(put("/profile")
