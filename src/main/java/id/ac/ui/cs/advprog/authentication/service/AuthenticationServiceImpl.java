@@ -1,5 +1,11 @@
 package id.ac.ui.cs.advprog.authentication.service;
 
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.springframework.stereotype.Service;
+
 import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
 import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
 import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
@@ -11,10 +17,6 @@ import id.ac.ui.cs.advprog.authentication.repository.AdminRepository;
 import id.ac.ui.cs.advprog.authentication.repository.TechnicianRepository;
 import id.ac.ui.cs.advprog.authentication.repository.UserRepository;
 import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCrypt;
-import org.springframework.stereotype.Service;
-import java.util.Optional;
 
 @Service
 public class AuthenticationServiceImpl implements AuthenticationService {
@@ -41,6 +43,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String rawPassword = request.getPassword();
         String role = null;
         String storedHashedPassword = null;
+        String userId = null;
 
         // Check Admins first
         Optional<Admin> adminOpt = adminRepository.findByEmail(email);
@@ -48,6 +51,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             Admin admin = adminOpt.get();
             storedHashedPassword = admin.getPassword();
             role = "ADMIN";
+            userId = admin.getId().toString();
         } else {
             // Then check Technicians
             Optional<Technician> techOpt = technicianRepository.findByEmail(email);
@@ -55,6 +59,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 Technician tech = techOpt.get();
                 storedHashedPassword = tech.getPassword();
                 role = "TECHNICIAN";
+                userId = tech.getId().toString();
             } else {
                 // Finally check Users
                 Optional<User> userOpt = userRepository.findByEmail(email);
@@ -62,6 +67,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     User user = userOpt.get();
                     storedHashedPassword = user.getPassword();
                     role = "USER";
+                    userId = user.getId().toString();
                 }
             }
         }
@@ -70,20 +76,17 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new Exception("No account found for email: " + email);
         }
 
-        // Verify password using BCrypt.
         if (!BCrypt.checkpw(rawPassword, storedHashedPassword)) {
             throw new Exception("Invalid password for email: " + email);
         }
 
-        String token = jwtTokenProvider.generateToken(email, role);
+        String token = jwtTokenProvider.generateToken(userId, role);
         return new AuthResponse(token);
     }
 
     @Override
     public User registerUser(UserRegistrationDto registrationDto) {
-        // Hash the password with BCrypt.
         String hashedPassword = BCrypt.hashpw(registrationDto.getPassword(), BCrypt.gensalt());
-        // Create new user with a dummy profile photo.
         User user = new User(
                 registrationDto.getFullName(),
                 registrationDto.getEmail(),
@@ -106,8 +109,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 hashedPassword,
                 registrationDto.getExperience(),
                 registrationDto.getAddress(),
-                0,    // totalJobsCompleted is initialized to 0.
-                0.0   // totalEarnings is initialized to 0.
+                0,
+                0.0
         );
         return technicianRepository.save(technician);
     }
