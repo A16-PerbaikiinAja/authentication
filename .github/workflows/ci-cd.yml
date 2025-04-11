@@ -128,6 +128,13 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             cd /home/ubuntu/app
+
+            if ! command -v docker &> /dev/null; then
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo systemctl start docker
+              sudo usermod -aG docker ubuntu
+            fi
             
             cat <<EOF > .env
             DATABASE_URL=${{ secrets.DATABASE_URL }}
