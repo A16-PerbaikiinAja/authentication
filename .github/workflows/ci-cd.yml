@@ -1,0 +1,68 @@
+name: CI/CD Workflows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  # PMD Analysis Job
+  pmd:
+    name: PMD Code Analysis
+    runs-on: ubuntu-22.04
+    permissions:
+      security-events: write
+    steps:
+      - name: Check out the Git repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java toolchain
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Run PMD
+        uses: pmd/pmd-github-action@v2
+        with:
+          version: '7.0.0-rc4'
+          sourcePath: 'src/main/java'
+          rulesets: 'rulesets/java/quickstart.xml'
+          analyzeModifiedFilesOnly: false
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: pmd-report.sarif
+
+  # Scorecard Security Analysis Job
+  scorecard:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+    steps:
+      - name: "Checkout code"
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: "Run analysis"
+        uses: ossf/scorecard-action@0864cf19026789058feabb7e87baa5f140aac736 # v2.3.1
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: "Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: "Upload to code-scanning"
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
