@@ -41,8 +41,6 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql:42.6.0")
     runtimeOnly("com.h2database:h2:2.2.220")
 
-    implementation("io.github.cdimascio:java-dotenv:5.2.2")
-
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")

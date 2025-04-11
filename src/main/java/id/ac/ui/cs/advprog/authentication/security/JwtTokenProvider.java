@@ -3,9 +3,9 @@ package id.ac.ui.cs.advprog.authentication.security;
 import java.security.Key;
 import java.util.Date;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -15,16 +15,12 @@ import io.jsonwebtoken.security.Keys;
 @Component
 public class JwtTokenProvider {
 
-    private final String jwtSecret;
+    @Value("${JWT_SECRET}")
+    private String jwtSecret;
+
     private final long JWT_EXPIRATION_MS = 3600000; // 1 hour
 
-    public JwtTokenProvider() {
-        Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
-        this.jwtSecret = dotenv.get("JWT_SECRET");
-    }
-
     private Key getSigningKey() {
-        // Convert Base64-encoded secret into a Key suitable for HS512
         byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
@@ -63,7 +59,7 @@ public class JwtTokenProvider {
             Jwts.parser().setSigningKey(getSigningKey()).parseClaimsJws(authToken);
             return true;
         } catch (Exception ex) {
-            // Token is invalid (expired, tampered, etc.)
+            // You can add logging here if needed
         }
         return false;
     }
