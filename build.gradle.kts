@@ -39,7 +39,7 @@ dependencies {
     implementation("org.springframework.security:spring-security-crypto:6.0.2")
 
     runtimeOnly("org.postgresql:postgresql:42.6.0")
-    runtimeOnly("com.h2database:h2:2.2.220")
+    testImplementation("com.h2database:h2:2.2.220")
 
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
