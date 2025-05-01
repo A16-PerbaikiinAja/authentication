@@ -1,6 +1,7 @@
 package id.ac.ui.cs.advprog.authentication.service;
 
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCrypt;
@@ -39,45 +40,39 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public AuthResponse login(AuthRequest request) throws Exception {
-        String email = request.getEmail();
+        String email       = request.getEmail();
         String rawPassword = request.getPassword();
-        String role = null;
-        String storedHashedPassword = null;
-        String userId = null;
 
-        // Check Admins first
         Optional<Admin> adminOpt = adminRepository.findByEmail(email);
-        if (adminOpt.isPresent()) {
-            Admin admin = adminOpt.get();
-            storedHashedPassword = admin.getPassword();
-            role = "ADMIN";
-            userId = admin.getId().toString();
-        } else {
-            // Then check Technicians
-            Optional<Technician> techOpt = technicianRepository.findByEmail(email);
-            if (techOpt.isPresent()) {
-                Technician tech = techOpt.get();
-                storedHashedPassword = tech.getPassword();
-                role = "TECHNICIAN";
-                userId = tech.getId().toString();
-            } else {
-                // Finally check Users
-                Optional<User> userOpt = userRepository.findByEmail(email);
-                if (userOpt.isPresent()) {
-                    User user = userOpt.get();
-                    storedHashedPassword = user.getPassword();
-                    role = "USER";
-                    userId = user.getId().toString();
-                }
-            }
-        }
+        Optional<Technician> techOpt = technicianRepository.findByEmail(email);
+        Optional<User> userOpt = userRepository.findByEmail(email);
 
-        if (storedHashedPassword == null) {
+        String storedHash;
+        String role;
+        if (adminOpt.isPresent()) {
+            storedHash = adminOpt.get().getPassword();
+            role       = "ADMIN";
+        } else if (techOpt.isPresent()) {
+            storedHash = techOpt.get().getPassword();
+            role       = "TECHNICIAN";
+        } else if (userOpt.isPresent()) {
+            storedHash = userOpt.get().getPassword();
+            role       = "USER";
+        } else {
             throw new Exception("No account found for email: " + email);
         }
 
-        if (!BCrypt.checkpw(rawPassword, storedHashedPassword)) {
+        if (!BCrypt.checkpw(rawPassword, storedHash)) {
             throw new Exception("Invalid password for email: " + email);
+        }
+
+        String userId;
+        if (adminOpt.isPresent()) {
+            userId = adminOpt.get().getId().toString();
+        } else if (techOpt.isPresent()) {
+            userId = techOpt.get().getId().toString();
+        } else {
+            userId = userOpt.get().getId().toString();
         }
 
         String token = jwtTokenProvider.generateToken(userId, role);
@@ -85,33 +80,51 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
-    public User registerUser(UserRegistrationDto registrationDto) {
-        String hashedPassword = BCrypt.hashpw(registrationDto.getPassword(), BCrypt.gensalt());
+    public User registerUser(UserRegistrationDto dto) {
+        if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Email is already in use");
+        }
+        if (!Pattern.compile("(?=.*[0-9])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}")
+                .matcher(dto.getPassword()).matches()) {
+            throw new IllegalArgumentException(
+                    "Password must be ≥8 characters and include a digit, uppercase letter, and special character"
+            );
+        }
+
+        String hashed = BCrypt.hashpw(dto.getPassword(), BCrypt.gensalt());
         User user = new User(
-                registrationDto.getFullName(),
-                registrationDto.getEmail(),
-                registrationDto.getPhoneNumber(),
-                hashedPassword,
-                registrationDto.getAddress()
+                dto.getFullName(),
+                dto.getEmail(),
+                dto.getPhoneNumber(),
+                hashed,
+                dto.getAddress()
         );
         return userRepository.save(user);
     }
 
     @Override
-    public Technician registerTechnician(TechnicianRegistrationDto registrationDto) {
-        // Hash the password.
-        String hashedPassword = BCrypt.hashpw(registrationDto.getPassword(), BCrypt.gensalt());
-        // Create new technician with a dummy profile photo.
-        Technician technician = new Technician(
-                registrationDto.getFullName(),
-                registrationDto.getEmail(),
-                registrationDto.getPhoneNumber(),
-                hashedPassword,
-                registrationDto.getExperience(),
-                registrationDto.getAddress(),
+    public Technician registerTechnician(TechnicianRegistrationDto dto) {
+        if (technicianRepository.findByEmail(dto.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Email is already in use");
+        }
+        if (!Pattern.compile("(?=.*[0-9])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}")
+                .matcher(dto.getPassword()).matches()) {
+            throw new IllegalArgumentException(
+                    "Password must be ≥8 characters and include a digit, uppercase letter, and special character"
+            );
+        }
+
+        String hashed = BCrypt.hashpw(dto.getPassword(), BCrypt.gensalt());
+        Technician tech = new Technician(
+                dto.getFullName(),
+                dto.getEmail(),
+                dto.getPhoneNumber(),
+                hashed,
+                dto.getExperience(),
+                dto.getAddress(),
                 0,
                 0.0
         );
-        return technicianRepository.save(technician);
+        return technicianRepository.save(tech);
     }
 }
