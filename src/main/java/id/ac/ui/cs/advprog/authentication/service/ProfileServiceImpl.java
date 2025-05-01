@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authentication.service;
 
 import java.util.UUID;
 
+import id.ac.ui.cs.advprog.authentication.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
@@ -17,11 +18,15 @@ public class ProfileServiceImpl implements ProfileService {
 
     private final UserRepository userRepository;
     private final TechnicianRepository technicianRepository;
+    private final AdminRepository adminRepository;
 
     @Autowired
-    public ProfileServiceImpl(UserRepository userRepository, TechnicianRepository technicianRepository) {
+    public ProfileServiceImpl(UserRepository userRepository,
+                              TechnicianRepository technicianRepository,
+                              AdminRepository adminRepository) {
         this.userRepository = userRepository;
         this.technicianRepository = technicianRepository;
+        this.adminRepository = adminRepository;
     }
 
     @Override
@@ -82,6 +87,9 @@ public class ProfileServiceImpl implements ProfileService {
         } else if ("TECHNICIAN".equalsIgnoreCase(role)) {
             return technicianRepository.findById(UUID.fromString(userId))
                     .orElseThrow(() -> new Exception("Technician not found"));
+        } else if ("ADMIN".equalsIgnoreCase(role)) {
+            return adminRepository.findById(UUID.fromString(userId))
+                    .orElseThrow(() -> new Exception("Admin not found"));
         } else {
             throw new Exception("Profile retrieval not allowed for role: " + role);
         }
