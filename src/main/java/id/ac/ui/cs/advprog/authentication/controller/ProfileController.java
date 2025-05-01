@@ -1,5 +1,7 @@
 package id.ac.ui.cs.advprog.authentication.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -13,15 +15,20 @@ import org.springframework.web.bind.annotation.RestController;
 import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
 import id.ac.ui.cs.advprog.authentication.service.ProfileService;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/profile")
 public class ProfileController {
 
     private final ProfileService profileService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    public ProfileController(ProfileService profileService) {
+    public ProfileController(ProfileService profileService,
+                             ObjectMapper objectMapper) {
         this.profileService = profileService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -30,7 +37,12 @@ public class ProfileController {
         String role = extractRole(authentication);
         try {
             Object profile = profileService.getProfile(userId, role);
-            return ResponseEntity.ok(profile);
+            Map<String, Object> body = objectMapper.convertValue(
+                    profile,
+                    new TypeReference<>() {}
+            );
+            body.put("role", role);
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
