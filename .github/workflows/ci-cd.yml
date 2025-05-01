@@ -158,7 +158,10 @@ jobs:
             
             # Deploy using Docker commands
             mv build/libs/*.jar app.jar || true
-            docker stop springboot-app || true
-            docker rm springboot-app || true
-            docker build -t springboot-app .
-            docker run -d -p 8080:8080 --name springboot-app --env-file .env springboot-app
+            sudo docker stop springboot-app || true
+            sudo docker rm springboot-app || true
+            sudo docker build -t springboot-app .
+            sudo docker run -d -p 8080:8080 \
+              --name springboot-app \
+              --env-file .env \
+              springboot-app
