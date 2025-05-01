@@ -1,17 +1,22 @@
 package id.ac.ui.cs.advprog.authentication.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.util.UUID;
-
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
+import id.ac.ui.cs.advprog.authentication.model.Admin;
+import id.ac.ui.cs.advprog.authentication.model.Technician;
+import id.ac.ui.cs.advprog.authentication.model.User;
+import id.ac.ui.cs.advprog.authentication.security.JwtAuthenticationFilter;
+import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
+import id.ac.ui.cs.advprog.authentication.service.ProfileService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
@@ -19,84 +24,116 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import java.util.UUID;
 
-import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
-import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
-import id.ac.ui.cs.advprog.authentication.service.ProfileService;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doAnswer;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ProfileController.class)
 @Import(id.ac.ui.cs.advprog.authentication.config.SecurityConfig.class)
+@AutoConfigureMockMvc
 class ProfileControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired private MockMvc mvc;
+    @MockBean private JwtTokenProvider jwtTokenProvider;
+    @MockBean JwtAuthenticationFilter jwtAuthenticationFilter;
+    @Autowired private ObjectMapper mapper;
+    @MockBean private ProfileService svc;
 
-    @MockBean
-    private ProfileService profileService;
-
-    @MockBean
-    private JwtTokenProvider jwtTokenProvider;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Test
-    @WithMockUser(username = "00000000-0000-0000-0000-000000000003", roles = {"USER"})
-    void testUpdateProfile_UserSuccess() throws Exception {
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        dto.setFullName("Updated User");
-        dto.setPhoneNumber("+1112223333");
-        dto.setAddress("Updated Address");
-        dto.setProfilePhoto("updated-user.png");
-        dto.setPassword("newPassword");
-
-        id.ac.ui.cs.advprog.authentication.model.User updatedUser =
-                new id.ac.ui.cs.advprog.authentication.model.User("Updated User", "user@example.com", "+1112223333", "hashedNewPassword", "Updated Address");
-        UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000003");
-        updatedUser.setId(userId);
-        updatedUser.setProfilePhoto("updated-user.png");
-
-        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("00000000-0000-0000-0000-000000000003"), eq("USER")))
-                .thenReturn(updatedUser);
-
-        mockMvc.perform(put("/profile")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(userId.toString()))
-                .andExpect(jsonPath("$.fullName").value("Updated User"))
-                .andExpect(jsonPath("$.profilePhoto").value("updated-user.png"));
+    @BeforeEach
+    void setupFilter() throws Exception {
+        doAnswer(invocation -> {
+            var req   = invocation.getArgument(0, HttpServletRequest.class);
+            var resp  = invocation.getArgument(1, HttpServletResponse.class);
+            var chain = invocation.getArgument(2, FilterChain.class);
+            chain.doFilter(req, resp);
+            return null;
+        }).when(jwtAuthenticationFilter)
+                .doFilter(any(HttpServletRequest.class),
+                        any(HttpServletResponse.class),
+                        any(FilterChain.class));
     }
 
-    @Test
-    @WithMockUser(username = "00000000-0000-0000-0000-000000000004", roles = {"TECHNICIAN"})
-    void testUpdateProfile_TechnicianSuccess() throws Exception {
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        dto.setFullName("Updated Tech");
-        dto.setPhoneNumber("9998887777");
-        dto.setAddress("Updated Tech Address");
-        dto.setProfilePhoto("updated-tech.png");
-        dto.setPassword("newTechPassword");
-        dto.setExperience(7);
+    private static final String USER_ID = "00000000-0000-0000-0000-000000000003";
+    private static final String TECH_ID = "00000000-0000-0000-0000-000000000004";
+    private static final String ADMIN_ID = "00000000-0000-0000-0000-000000000005";
 
-        id.ac.ui.cs.advprog.authentication.model.Technician updatedTech =
-                new id.ac.ui.cs.advprog.authentication.model.Technician("Updated Tech", "tech@example.com", "9998887777", "hashedTechPassword", 7, "Updated Tech Address", 0, 0.0);
-        UUID techId = UUID.fromString("00000000-0000-0000-0000-000000000004");
-        updatedTech.setId(techId);
-        updatedTech.setProfilePhoto("updated-tech.png");
+    @Nested class GetProfile {
+        @Test @WithMockUser(username=USER_ID, roles="USER")
+        void userSuccess() throws Exception {
+            var u = new User("Alice","a@x.com","+1","pwd","addr");
+            u.setId(UUID.fromString(USER_ID));
+            given(svc.getProfile(USER_ID, "USER")).willReturn(u);
 
-        Mockito.when(profileService.updateProfile(any(ProfileUpdateDto.class), eq("00000000-0000-0000-0000-000000000004"), eq("TECHNICIAN")))
-                .thenReturn(updatedTech);
+            var res = mvc.perform(get("/profile")).andExpect(status().isOk()).andReturn();
+            var body = mapper.readValue(res.getResponse().getContentAsString(), new TypeReference<Map<String,Object>>() {});
+            assertThat(body).containsEntry("id", USER_ID).containsEntry("role","USER");
+        }
 
-        mockMvc.perform(put("/profile")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(techId.toString()))
-                .andExpect(jsonPath("$.fullName").value("Updated Tech"))
-                .andExpect(jsonPath("$.profilePhoto").value("updated-tech.png"));
+        @Test @WithMockUser(username=TECH_ID, roles="TECHNICIAN")
+        void techSuccess() throws Exception {
+            var t = new Technician("Bob","b@x.com","222","pwd",5,"addr",0,0.0);
+            t.setId(UUID.fromString(TECH_ID));
+            given(svc.getProfile(TECH_ID, "TECHNICIAN")).willReturn(t);
+
+            mvc.perform(get("/profile"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(TECH_ID))
+                    .andExpect(jsonPath("$.role").value("TECHNICIAN"));
+        }
+
+        @Test @WithMockUser(username = ADMIN_ID, roles = "ADMIN")
+        void adminSuccess() throws Exception {
+            var a = new Admin("Carol", "c@x.com", "333", "pwd");
+            a.setId(UUID.fromString(ADMIN_ID));
+            given(svc.getProfile(ADMIN_ID, "ADMIN")).willReturn(a);
+
+            mvc.perform(get("/profile"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(ADMIN_ID))
+                    .andExpect(jsonPath("$.role").value("ADMIN"));
+        }
+
+        @Test @WithMockUser(username=USER_ID, roles="USER")
+        void errorPath() throws Exception {
+            given(svc.getProfile(USER_ID, "USER")).willThrow(new RuntimeException("Not found"));
+            mvc.perform(get("/profile"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string("Not found"));
+        }
+    }
+
+    @Nested class UpdateProfile {
+        @Test @WithMockUser(username=USER_ID, roles="USER")
+        void userSuccess() throws Exception {
+            var dto = new ProfileUpdateDto();
+            dto.setFullName("Alice2");
+            var updated = new User("Alice2","a@x.com","+1","hashed","addr");
+            updated.setId(UUID.fromString(USER_ID));
+            given(svc.updateProfile(dto, USER_ID, "USER")).willReturn(updated);
+
+            mvc.perform(put("/profile").with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(dto)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.fullName").value("Alice2"));
+        }
+
+        @Test @WithMockUser(username=USER_ID, roles="USER")
+        void serviceError() throws Exception {
+            var dto = new ProfileUpdateDto();
+            given(svc.updateProfile(dto, USER_ID, "USER")).willThrow(new IllegalArgumentException("Bad"));
+            mvc.perform(put("/profile").with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(dto)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string("Bad"));
+        }
     }
 }
