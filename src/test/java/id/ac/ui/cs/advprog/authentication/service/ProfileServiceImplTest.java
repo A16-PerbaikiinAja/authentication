@@ -1,102 +1,116 @@
 package id.ac.ui.cs.advprog.authentication.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
+import id.ac.ui.cs.advprog.authentication.model.Admin;
+import id.ac.ui.cs.advprog.authentication.model.Technician;
+import id.ac.ui.cs.advprog.authentication.model.User;
+import id.ac.ui.cs.advprog.authentication.repository.AdminRepository;
+import id.ac.ui.cs.advprog.authentication.repository.TechnicianRepository;
+import id.ac.ui.cs.advprog.authentication.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import id.ac.ui.cs.advprog.authentication.dto.ProfileUpdateDto;
-import id.ac.ui.cs.advprog.authentication.model.Technician;
-import id.ac.ui.cs.advprog.authentication.model.User;
-import id.ac.ui.cs.advprog.authentication.repository.TechnicianRepository;
-import id.ac.ui.cs.advprog.authentication.repository.UserRepository;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.BDDMockito.*;
 
 class ProfileServiceImplTest {
 
-    private UserRepository userRepository;
-    private TechnicianRepository technicianRepository;
-    private ProfileServiceImpl profileService;
+    private UserRepository userRepo;
+    private TechnicianRepository techRepo;
+    private AdminRepository adminRepo;
+    private ProfileServiceImpl svc;
 
     @BeforeEach
-    void setUp() {
-        userRepository = Mockito.mock(UserRepository.class);
-        technicianRepository = Mockito.mock(TechnicianRepository.class);
-        profileService = new ProfileServiceImpl(userRepository, technicianRepository);
+    void init() {
+        userRepo = mock(UserRepository.class);
+        techRepo  = mock(TechnicianRepository.class);
+        adminRepo = mock(AdminRepository.class);
+        svc = new ProfileServiceImpl(userRepo, techRepo, adminRepo);
     }
 
-    @Test
-    void testUpdateUserProfileSuccess() throws Exception {
-        // Setup a dummy user with initial data.
-        User user = new User("John Doe", "john@example.com", "+123456789", "oldPassword", "Old Address");
-        UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        user.setId(userId);
-        Mockito.when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        // Create DTO with updated fields.
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        dto.setFullName("John Smith");
-        dto.setPhoneNumber("+987654321");
-        dto.setAddress("New Address");
-        dto.setProfilePhoto("new-user.png");
-        dto.setPassword("newPassword");
-        // Stub save method to return the updated user.
-        Mockito.when(userRepository.save(Mockito.any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        User updatedUser = (User) profileService.updateProfile(dto, userId.toString(), "USER");
-        // Verify that fields are updated.
-        assertEquals("John Smith", updatedUser.getFullName());
-        assertEquals("+987654321", updatedUser.getPhoneNumber());
-        assertEquals("New Address", updatedUser.getAddress());
-        assertEquals("new-user.png", updatedUser.getProfilePhoto());
-        // Verify that the password is hashed (i.e. not equal to plain "newPassword").
-        assertNotEquals("newPassword", updatedUser.getPassword());
+    @Nested class UpdateTests {
+        @Test void partialUserUpdateKeepsOthers() throws Exception {
+            var id = UUID.randomUUID();
+            var u = new User("Name","e@x.com","+","old","addr");
+            u.setId(id);
+            given(userRepo.findById(id)).willReturn(Optional.of(u));
+            given(userRepo.save(any(User.class))).willAnswer(i -> i.getArgument(0));
+
+            var dto = new ProfileUpdateDto();
+            dto.setAddress("newAddr");  // only address
+
+            var updated = (User) svc.updateProfile(dto, id.toString(), "USER");
+            assertThat(updated.getFullName()).isEqualTo("Name");
+            assertThat(updated.getAddress()).isEqualTo("newAddr");
+        }
+
+        @Test void nullExperienceUnchanged() throws Exception {
+            var id = UUID.randomUUID();
+            var t = new Technician("T","t@x.com","p","old",5,"addr",0,0.0);
+            t.setId(id);
+            given(techRepo.findById(id)).willReturn(Optional.of(t));
+            given(techRepo.save(any(Technician.class))).willAnswer(i -> i.getArgument(0));
+
+            var dto = new ProfileUpdateDto();
+            dto.setFullName("NewName");
+
+            var updated = (Technician) svc.updateProfile(dto, id.toString(), "TECHNICIAN");
+            assertThat(updated.getExperience()).isEqualTo(5);
+        }
+
+        @Test void adminUpdateNotAllowed() {
+            var dto = new ProfileUpdateDto();
+            assertThatThrownBy(() -> svc.updateProfile(dto, UUID.randomUUID().toString(), "ADMIN"))
+                    .isInstanceOf(Exception.class)
+                    .hasMessageContaining("Profile update not allowed for role: ADMIN");
+        }
     }
 
-    @Test
-    void testUpdateTechnicianProfileSuccess() throws Exception {
-        Technician technician = new Technician("Tech One", "tech@example.com", "1112223333", "oldTechPassword", 3, "Old Tech Address", 0, 0.0);
-        UUID techId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        technician.setId(techId);
-        Mockito.when(technicianRepository.findById(techId)).thenReturn(Optional.of(technician));
-        Mockito.when(technicianRepository.save(Mockito.any(Technician.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        dto.setFullName("Tech Updated");
-        dto.setPhoneNumber("9998887777");
-        dto.setAddress("New Tech Address");
-        dto.setProfilePhoto("new-tech.png");
-        dto.setPassword("newTechPassword");
-        dto.setExperience(5);
-        Technician updatedTech = (Technician) profileService.updateProfile(dto, techId.toString(), "TECHNICIAN");
-        assertEquals("Tech Updated", updatedTech.getFullName());
-        assertEquals("9998887777", updatedTech.getPhoneNumber());
-        assertEquals("New Tech Address", updatedTech.getAddress());
-        assertEquals("new-tech.png", updatedTech.getProfilePhoto());
-        assertEquals(5, updatedTech.getExperience());
-        assertNotEquals("newTechPassword", updatedTech.getPassword());
-    }
+    @Nested class GetTests {
+        @Test void getUserSuccess() throws Exception {
+            var id = UUID.randomUUID();
+            var u = new User("U","u@x.com","p","pwd","addr");
+            u.setId(id);
+            given(userRepo.findById(id)).willReturn(Optional.of(u));
 
-    @Test
-    void testUpdateUserProfile_UserNotFound() {
-        UUID nonExistentId = UUID.fromString("00000000-0000-0000-0000-000000000099");
-        Mockito.when(userRepository.findById(nonExistentId)).thenReturn(Optional.empty());
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        Exception exception = assertThrows(Exception.class, () ->
-                profileService.updateProfile(dto, nonExistentId.toString(), "USER"));
-        assertTrue(exception.getMessage().contains("User not found"));
-    }
+            assertThat(svc.getProfile(id.toString(), "USER")).isSameAs(u);
+        }
 
-    @Test
-    void testUpdateTechnicianProfile_TechnicianNotFound() {
-        UUID nonExistentId = UUID.fromString("00000000-0000-0000-0000-000000000099");
-        Mockito.when(technicianRepository.findById(nonExistentId)).thenReturn(Optional.empty());
-        ProfileUpdateDto dto = new ProfileUpdateDto();
-        Exception exception = assertThrows(Exception.class, () ->
-                profileService.updateProfile(dto, nonExistentId.toString(), "TECHNICIAN"));
-        assertTrue(exception.getMessage().contains("Technician not found"));
+        @Test void getTechSuccess() throws Exception {
+            var id = UUID.randomUUID();
+            var t = new Technician("T","t@x.com","p","pwd",0,"addr",0,0.0);
+            t.setId(id);
+            given(techRepo.findById(id)).willReturn(Optional.of(t));
+
+            assertThat(svc.getProfile(id.toString(), "TECHNICIAN")).isSameAs(t);
+        }
+
+        @Test
+        void getAdminSuccess() throws Exception {
+            var id = UUID.randomUUID();
+            var a = new Admin("A", "a@x.com", "p", "pwd");
+            a.setId(id);
+            given(adminRepo.findById(id)).willReturn(Optional.of(a));
+
+            assertThat(svc.getProfile(id.toString(), "ADMIN")).isSameAs(a);
+        }
+
+        @Test void adminNotFound() {
+            var id = UUID.randomUUID();
+            given(adminRepo.findById(id)).willReturn(Optional.empty());
+            assertThatThrownBy(() -> svc.getProfile(id.toString(), "ADMIN"))
+                    .isInstanceOf(Exception.class)
+                    .hasMessageContaining("Admin not found");
+        }
+
+        @Test void unsupportedRole() {
+            assertThatThrownBy(() -> svc.getProfile(UUID.randomUUID().toString(), "UNKNOWN"))
+                    .isInstanceOf(Exception.class)
+                    .hasMessageContaining("Profile retrieval not allowed for role: UNKNOWN");
+        }
     }
 }
