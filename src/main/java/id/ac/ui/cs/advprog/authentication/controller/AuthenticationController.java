@@ -58,7 +58,7 @@ public class AuthenticationController {
                     .secure(!debug)
                     .path("/")
                     .maxAge(60 * 60 * 24)
-                    .sameSite("Strict")
+                    .sameSite("None")
                     .build();
 
             return ResponseEntity
