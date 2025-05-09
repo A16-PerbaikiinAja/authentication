@@ -40,7 +40,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(AuthenticationController.class)
 @Import(SecurityConfig.class)
-@TestPropertySource(properties = "debug=false")
 class AuthenticationControllerTest {
 
     @Autowired private MockMvc mvc;
@@ -99,8 +98,7 @@ class AuthenticationControllerTest {
             String cookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
             assertThat(cookie)
                     .contains("HttpOnly")
-                    .contains("SameSite=Strict")
-                    .contains("Secure");
+                    .contains("SameSite=None");
         }
 
         static Stream<String[]> goodCredentials() {
@@ -147,7 +145,7 @@ class AuthenticationControllerTest {
                     .andExpect(header().string(HttpHeaders.SET_COOKIE,
                             org.hamcrest.Matchers.containsString("HttpOnly")))
                     .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("SameSite=Strict")));
+                            org.hamcrest.Matchers.containsString("SameSite=None")));
         }
     }
 

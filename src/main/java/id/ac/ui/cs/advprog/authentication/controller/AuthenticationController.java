@@ -25,9 +25,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/auth")
 public class AuthenticationController {
-    @Value("${debug:false}")
-    private boolean debug;
-
     private final AuthenticationService authenticationService;
 
     @Autowired
@@ -55,10 +52,9 @@ public class AuthenticationController {
 
             ResponseCookie cookie = ResponseCookie.from("token", response.getToken())
                     .httpOnly(true)
-                    .secure(!debug)
                     .path("/")
                     .maxAge(60 * 60 * 24)
-                    .sameSite("None")
+                    .sameSite("Lax")
                     .build();
 
             return ResponseEntity
@@ -76,10 +72,9 @@ public class AuthenticationController {
     public ResponseEntity<?> logout() {
         ResponseCookie cookie = ResponseCookie.from("token", "")
                 .httpOnly(true)
-                .secure(!debug)
                 .path("/")
                 .maxAge(0)
-                .sameSite("Strict")
+                .sameSite("Lax")
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
