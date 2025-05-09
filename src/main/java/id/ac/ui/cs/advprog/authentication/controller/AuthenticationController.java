@@ -10,14 +10,11 @@ import id.ac.ui.cs.advprog.authentication.model.User;
 import id.ac.ui.cs.advprog.authentication.service.AuthenticationService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -49,36 +46,12 @@ public class AuthenticationController {
         }
         try {
             AuthResponse response = authenticationService.login(authRequest);
-
-            ResponseCookie cookie = ResponseCookie.from("token", response.getToken())
-                    .httpOnly(true)
-                    .path("/")
-                    .maxAge(60 * 60 * 24)
-                    .sameSite("Lax")
-                    .build();
-
-            return ResponseEntity
-                    .ok()
-                    .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                    .build();
+            return ResponseEntity.ok(response);
         } catch (Exception ex) {
             return ResponseEntity
                     .badRequest()
                     .body(Map.of("error", ex.getMessage()));
         }
-    }
-
-    @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
-        ResponseCookie cookie = ResponseCookie.from("token", "")
-                .httpOnly(true)
-                .path("/")
-                .maxAge(0)
-                .sameSite("Lax")
-                .build();
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .build();
     }
 
     @PermitAll
