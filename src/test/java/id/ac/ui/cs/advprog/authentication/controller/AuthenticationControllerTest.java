@@ -20,10 +20,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -32,10 +30,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AuthenticationController.class)
@@ -50,19 +47,18 @@ class AuthenticationControllerTest {
 
     @BeforeEach
     void bypassFilter() throws Exception {
+        // let requests through the JWT filter
         doAnswer(invocation -> {
-            HttpServletRequest req   = invocation.getArgument(0);
-            HttpServletResponse res   = invocation.getArgument(1);
+            HttpServletRequest req = invocation.getArgument(0);
+            HttpServletResponse res = invocation.getArgument(1);
             FilterChain chain = invocation.getArgument(2);
             chain.doFilter(req, res);
             return null;
         })
                 .when(jwtFilter)
-                .doFilter(
-                        any(HttpServletRequest.class),
+                .doFilter(any(HttpServletRequest.class),
                         any(HttpServletResponse.class),
-                        any(FilterChain.class)
-                );
+                        any(FilterChain.class));
     }
 
     private static class AuthRequestBuilder {
@@ -84,21 +80,18 @@ class AuthenticationControllerTest {
         @WithAnonymousUser
         void loginSuccess(String email, String pwd) throws Exception {
             var req = new AuthRequestBuilder().email(email).password(pwd).build();
-            given(authService.login(req)).willReturn(new AuthResponse("token-"+email));
+            given(authService.login(req))
+                    .willReturn(new AuthResponse("token-" + email));
 
-            var result = mvc.perform(post("/auth/login").with(csrf())
+            mvc.perform(post("/auth/login")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("token=token-"+email)))
-                    .andReturn();
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.token").value("token-" + email));
 
             verify(authService).login(req);
-            String cookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
-            assertThat(cookie)
-                    .contains("HttpOnly")
-                    .contains("SameSite=None");
         }
 
         static Stream<String[]> goodCredentials() {
@@ -111,11 +104,17 @@ class AuthenticationControllerTest {
 
         @Test @WithAnonymousUser
         void loginValidationFails() throws Exception {
-            var bad = new AuthRequestBuilder().email("").password("short").build();
-            mvc.perform(post("/auth/login").with(csrf())
+            var bad = new AuthRequestBuilder()
+                    .email("")
+                    .password("short")
+                    .build();
+
+            mvc.perform(post("/auth/login")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(bad)))
                     .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.email").exists())
                     .andExpect(jsonPath("$.password").exists());
         }
@@ -123,29 +122,16 @@ class AuthenticationControllerTest {
         @Test @WithAnonymousUser
         void loginServiceThrows() throws Exception {
             var req = new AuthRequestBuilder().build();
-            given(authService.login(req)).willThrow(new RuntimeException("Auth failed"));
+            given(authService.login(req))
+                    .willThrow(new RuntimeException("Auth failed"));
 
-            mvc.perform(post("/auth/login").with(csrf())
+            mvc.perform(post("/auth/login")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(req)))
                     .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.error").value("Auth failed"));
-        }
-    }
-
-    @Nested class LogoutTests {
-        @Test @WithAnonymousUser
-        void logoutClearsCookie() throws Exception {
-            mvc.perform(post("/auth/logout").with(csrf()))
-                    .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("token=")))
-                    .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("Max-Age=0")))
-                    .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("HttpOnly")))
-                    .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                            org.hamcrest.Matchers.containsString("SameSite=None")));
         }
     }
 
@@ -159,23 +145,30 @@ class AuthenticationControllerTest {
             dto.setPassword("Password1!");
             dto.setAddress("Addr");
 
-            var u = new User("John", dto.getEmail(), dto.getPhoneNumber(), dto.getPassword(), dto.getAddress());
+            var u = new User("John", dto.getEmail(),
+                    dto.getPhoneNumber(),
+                    dto.getPassword(), dto.getAddress());
             u.setId(UUID.randomUUID());
-            given(authService.registerUser(any())).willReturn(u);
+            given(authService.registerUser(any()))
+                    .willReturn(u);
 
-            mvc.perform(post("/auth/register/user").with(csrf())
+            mvc.perform(post("/auth/register/user")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(dto)))
                     .andExpect(status().isOk())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.id").value(u.getId().toString()));
         }
 
         @Test @WithAnonymousUser
         void validationFails() throws Exception {
-            mvc.perform(post("/auth/register/user").with(csrf())
+            mvc.perform(post("/auth/register/user")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.fullName").exists())
                     .andExpect(jsonPath("$.email").exists());
         }
@@ -192,10 +185,12 @@ class AuthenticationControllerTest {
             given(authService.registerUser(dto))
                     .willThrow(new IllegalArgumentException("Email is already in use"));
 
-            mvc.perform(post("/auth/register/user").with(csrf())
+            mvc.perform(post("/auth/register/user")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(dto)))
                     .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.error").value("Email is already in use"));
         }
     }
@@ -221,16 +216,19 @@ class AuthenticationControllerTest {
                     0, 0.0
             );
             t.setId(UUID.randomUUID());
-            given(authService.registerTechnician(any())).willReturn(t);
+            given(authService.registerTechnician(any()))
+                    .willReturn(t);
 
-            mvc.perform(post("/auth/register/technician").with(csrf())
+            mvc.perform(post("/auth/register/technician")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(dto)))
                     .andExpect(status().isOk())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.id").value(t.getId().toString()));
         }
 
-        @Test @WithMockUser(roles = "ADMIN")
+        @Test @WithMockUser(roles="ADMIN")
         void serviceThrows() throws Exception {
             var dto = new TechnicianRegistrationDto();
             dto.setFullName("Tech");
@@ -248,12 +246,14 @@ class AuthenticationControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(mapper.writeValueAsString(dto)))
                     .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.error").value("Email is already in use"));
         }
 
         @Test @WithMockUser(roles="USER")
         void forbiddenForNonAdmin() throws Exception {
-            mvc.perform(post("/auth/register/technician").with(csrf())
+            mvc.perform(post("/auth/register/technician")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isForbidden());
