@@ -144,7 +144,6 @@ jobs:
             
             # Create .env file with deployment configuration
             cat <<EOF > .env
-            DEBUG=false
             CORS_ALLOWED_ORIGIN=${{ secrets.CORS_ALLOWED_ORIGIN }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             DATABASE_USERNAME=${{ secrets.DATABASE_USERNAME }}
