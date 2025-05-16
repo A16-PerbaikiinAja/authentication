@@ -2,6 +2,20 @@
 
 This project provides authentication services for users, technicians, and administrators. It handles account creation, login, and profile management. Users can register and manage their profiles, while technicians have additional attributes such as experience and job statistics. Administrators can create technician accounts. All secure endpoints require a valid JWT token.
 
+## Architecture Diagrams
+
+### Component Diagram
+
+This diagram shows the high-level structure of the authentication service: how configuration, controllers, services, repositories, and models interact.
+
+![Authentication Component Diagram](./docs/diagrams/auth-component.png)
+
+### Code Diagram
+
+This diagram illustrates the internal class structure of the authentication module. It includes interfaces, implementations, and their relationships.
+
+![Authentication Code Diagram](./docs/diagrams/auth-code.png)
+
 ## API Reference
 
 ### Authentication Endpoints
