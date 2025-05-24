@@ -1,8 +1,27 @@
 package id.ac.ui.cs.advprog.authentication.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
-import id.ac.ui.cs.advprog.authentication.dto.UserRegistrationDto;
+import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
 import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
+import id.ac.ui.cs.advprog.authentication.dto.UserRegistrationDto;
 import id.ac.ui.cs.advprog.authentication.model.Admin;
 import id.ac.ui.cs.advprog.authentication.model.Technician;
 import id.ac.ui.cs.advprog.authentication.model.User;
@@ -10,227 +29,294 @@ import id.ac.ui.cs.advprog.authentication.repository.AdminRepository;
 import id.ac.ui.cs.advprog.authentication.repository.TechnicianRepository;
 import id.ac.ui.cs.advprog.authentication.repository.UserRepository;
 import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.crypto.bcrypt.BCrypt;
 
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
+@ExtendWith(MockitoExtension.class)
 class AuthenticationServiceImplTest {
 
-    private AdminRepository adminRepo;
-    private TechnicianRepository techRepo;
-    private UserRepository userRepo;
-    private JwtTokenProvider jwtProv;
-    private AuthenticationServiceImpl svc;
+    @Mock
+    private AdminRepository adminRepository;
+
+    @Mock
+    private TechnicianRepository technicianRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
+
+    @InjectMocks
+    private AuthenticationServiceImpl service;
+
+    private final String rawPassword = "Secret1!";
+    private String hashedPassword;
 
     @BeforeEach
-    void init() {
-        adminRepo = mock(AdminRepository.class);
-        techRepo  = mock(TechnicianRepository.class);
-        userRepo  = mock(UserRepository.class);
-        jwtProv   = mock(JwtTokenProvider.class);
-        svc = new AuthenticationServiceImpl(adminRepo, techRepo, userRepo, jwtProv);
+    void setUp() {
+        hashedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
     }
 
-    @Nested
-    class LoginTests {
+    @Test
+    void loginSucceedsForAdmin() throws Exception {
+        // Arrange
+        String email = "admin@example.com";
+        Admin admin = new Admin();
+        admin.setId(UUID.randomUUID());
+        admin.setEmail(email);
+        admin.setPassword(hashedPassword);
 
-        @Test
-        void success_admin() throws Exception {
-            String email = "admin@x.com";
-            String rawPwd = "Admin1!";
-            String id = UUID.randomUUID().toString();
-            String hashed = BCrypt.hashpw(rawPwd, BCrypt.gensalt());
+        when(adminRepository.findByEmail(email)).thenReturn(Optional.of(admin));
+        when(technicianRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(jwtTokenProvider.generateToken(admin.getId().toString(), "ADMIN"))
+                .thenReturn("admintoken");
 
-            Admin a = new Admin("A", email, "p", hashed);
-            a.setId(UUID.fromString(id));
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.of(a));
-            when(jwtProv.generateToken(id, "ADMIN")).thenReturn("tok-ADMIN");
+        AuthRequest request = new AuthRequest();
+        request.setEmail(email);
+        request.setPassword(rawPassword);
 
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword(rawPwd);
+        // Act
+        AuthResponse resp = service.login(request);
 
-            var resp = svc.login(req);
-            assertEquals("tok-ADMIN", resp.getToken());
-        }
-
-        @Test
-        void success_technician() throws Exception {
-            String email = "tech@x.com";
-            String rawPwd = "Tech1!";
-            String id = UUID.randomUUID().toString();
-            String hashed = BCrypt.hashpw(rawPwd, BCrypt.gensalt());
-
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.empty());
-            Technician t = new Technician("T", email, "p", hashed, 0, "addr", 0, 0.0);
-            t.setId(UUID.fromString(id));
-            when(techRepo.findByEmail(email)).thenReturn(Optional.of(t));
-            when(jwtProv.generateToken(id, "TECHNICIAN")).thenReturn("tok-TECHNICIAN");
-
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword(rawPwd);
-
-            var resp = svc.login(req);
-            assertEquals("tok-TECHNICIAN", resp.getToken());
-        }
-
-        @Test
-        void success_user() throws Exception {
-            String email = "user@x.com";
-            String rawPwd = "User1!";
-            String id = UUID.randomUUID().toString();
-            String hashed = BCrypt.hashpw(rawPwd, BCrypt.gensalt());
-
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.empty());
-            when(techRepo.findByEmail(email)).thenReturn(Optional.empty());
-            User u = new User("U", email, "p", hashed, "addr");
-            u.setId(UUID.fromString(id));
-            when(userRepo.findByEmail(email)).thenReturn(Optional.of(u));
-            when(jwtProv.generateToken(id, "USER")).thenReturn("tok-USER");
-
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword(rawPwd);
-
-            var resp = svc.login(req);
-            assertEquals("tok-USER", resp.getToken());
-        }
-
-        @Test
-        void noAccount() throws Exception {
-            String email = "x@x.com";
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.empty());
-            when(techRepo.findByEmail(email)).thenReturn(Optional.empty());
-            when(userRepo.findByEmail(email)).thenReturn(Optional.empty());
-
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword("pwd");
-
-            Exception ex = assertThrows(Exception.class, () -> svc.login(req));
-            assertTrue(ex.getMessage().contains("No account found for email: " + email));
-        }
-
-        @Test
-        void badPassword() throws Exception {
-            String email = "a@x.com";
-            String rawPwd = "wrong";
-            String hashed = BCrypt.hashpw("other", BCrypt.gensalt());
-
-            Admin a = new Admin("A", email, "p", hashed);
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.of(a));
-
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword(rawPwd);
-
-            Exception ex = assertThrows(Exception.class, () -> svc.login(req));
-            assertTrue(ex.getMessage().contains("Invalid password for email: " + email));
-        }
-
-        @Test
-        void jwtError() throws Exception {
-            String email = "u@x.com";
-            String rawPwd = "Pwd1!";
-            String id = UUID.randomUUID().toString();
-            String hashed = BCrypt.hashpw(rawPwd, BCrypt.gensalt());
-
-            when(adminRepo.findByEmail(email)).thenReturn(Optional.empty());
-            when(techRepo.findByEmail(email)).thenReturn(Optional.empty());
-            User u = new User("U", email, "p", hashed, "");
-            u.setId(UUID.fromString(id));
-            when(userRepo.findByEmail(email)).thenReturn(Optional.of(u));
-            when(jwtProv.generateToken(any(), any())).thenThrow(new RuntimeException("JWT fail"));
-
-            AuthRequest req = new AuthRequest();
-            req.setEmail(email);
-            req.setPassword(rawPwd);
-
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> svc.login(req));
-            assertEquals("JWT fail", ex.getMessage());
-        }
+        // Assert
+        assertEquals("admintoken", resp.getToken());
+        verify(jwtTokenProvider).generateToken(admin.getId().toString(), "ADMIN");
     }
 
-    @Nested
-    class RegisterTests {
+    @Test
+    void loginFailsWhenNoAccount() {
+        // Arrange
+        String email = "nouser@example.com";
+        when(adminRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(technicianRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
 
-        @Test
-        void userSuccess() {
-            var dto = new UserRegistrationDto();
-            dto.setFullName("X");
-            dto.setEmail("x@x.com");
-            dto.setPhoneNumber("+1");
-            dto.setPassword("Password1!");
-            dto.setAddress("addr");
+        AuthRequest request = new AuthRequest();
+        request.setEmail(email);
+        request.setPassword(rawPassword);
 
-            when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
-            when(userRepo.save(any(User.class))).thenAnswer(inv -> {
-                var u = inv.getArgument(0, User.class);
-                u.setId(UUID.randomUUID());
-                return u;
-            });
+        // Act & Assert
+        Exception ex = assertThrows(Exception.class, () -> service.login(request));
+        assertTrue(ex.getMessage().contains("No account found"));
+    }
 
-            User result = svc.registerUser(dto);
-            assertNotNull(result.getId());
-            assertEquals("x@x.com", result.getEmail());
-        }
+    @Test
+    void loginFailsWithWrongPassword() {
+        // Arrange
+        String email = "tech@example.com";
+        Technician tech = new Technician();
+        tech.setId(UUID.randomUUID());
+        tech.setEmail(email);
+        tech.setPassword(hashedPassword);
 
-        @Test
-        void userEmailConflict() {
-            var dto = new UserRegistrationDto();
-            dto.setFullName("X");
-            dto.setEmail("x@x.com");
-            dto.setPhoneNumber("+1");
-            dto.setPassword("Password1!");
-            dto.setAddress("addr");
+        when(adminRepository.findByEmail(email)).thenReturn(Optional.empty());
+        when(technicianRepository.findByEmail(email)).thenReturn(Optional.of(tech));
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
 
-            when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.of(new User()));
+        AuthRequest request = new AuthRequest();
+        request.setEmail(email);
+        request.setPassword("WrongPass1!");
 
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                    () -> svc.registerUser(dto));
-            assertTrue(ex.getMessage().contains("Email is already in use"));
-        }
+        // Act & Assert
+        Exception ex = assertThrows(Exception.class, () -> service.login(request));
+        assertTrue(ex.getMessage().contains("Invalid password"));
+    }
 
-        @Test
-        void userPasswordFail() {
-            var dto = new UserRegistrationDto();
-            dto.setFullName("X");
-            dto.setEmail("x2@x.com");
-            dto.setPhoneNumber("+1");
-            dto.setPassword("simple"); // too weak
-            dto.setAddress("addr");
+    @Test
+    void registerUserSucceeds() {
+        // Arrange
+        UserRegistrationDto dto = new UserRegistrationDto();
+        dto.setEmail("newuser@example.com");
+        dto.setPassword("Valid1!A");
+        dto.setFullName("New User");
+        dto.setPhoneNumber("123456789");
+        dto.setAddress("123 Main St");
 
-            when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
 
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                    () -> svc.registerUser(dto));
-            assertTrue(ex.getMessage().contains("Password must be"));
-        }
+        // Act
+        service.registerUser(dto);
 
-        @Test
-        void techEmailConflict() {
-            var dto = new TechnicianRegistrationDto();
-            dto.setFullName("T");
-            dto.setEmail("t@x.com");
-            dto.setPhoneNumber("+1");
-            dto.setPassword("Pass1!");
-            dto.setExperience(0);
-            dto.setAddress("addr");
+        // Assert
+        verify(userRepository).save(argThat(u ->
+                u.getEmail().equals(dto.getEmail()) &&
+                        u.getFullName().equals(dto.getFullName()) &&
+                        BCrypt.checkpw(dto.getPassword(), u.getPassword())
+        ));
+    }
 
-            when(techRepo.findByEmail(dto.getEmail())).thenReturn(Optional.of(new Technician()));
+    @Test
+    void registerUserFailsOnDuplicateEmail() {
+        // Arrange
+        UserRegistrationDto dto = new UserRegistrationDto();
+        dto.setEmail("dup@example.com");
+        dto.setPassword("Valid1!");
 
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                    () -> svc.registerTechnician(dto));
-            assertTrue(ex.getMessage().contains("Email is already in use"));
-        }
+        when(userRepository.findByEmail(dto.getEmail()))
+                .thenReturn(Optional.of(new User()));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.registerUser(dto)
+        );
+        assertTrue(ex.getMessage().contains("Email is already in use"));
+    }
+
+    @Test
+    void registerUserFailsOnWeakPassword() {
+        // Arrange
+        UserRegistrationDto dto = new UserRegistrationDto();
+        dto.setEmail("user@example.com");
+        dto.setPassword("weak");
+
+        when(userRepository.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.registerUser(dto)
+        );
+        assertTrue(ex.getMessage().contains("Password must be"));
+    }
+
+    @Test
+    void registerTechnicianSucceeds() {
+        // Arrange
+        TechnicianRegistrationDto dto = new TechnicianRegistrationDto();
+        dto.setEmail("tech@example.com");
+        dto.setPassword("Valid1!A");
+        dto.setFullName("Tech Person");
+        dto.setPhoneNumber("987654321");
+        dto.setAddress("456 Tech Rd");
+        dto.setExperience(5);
+
+        when(technicianRepository.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
+
+        // Act
+        service.registerTechnician(dto);
+
+        // Assert
+        verify(technicianRepository).save(argThat(t ->
+                t.getEmail().equals(dto.getEmail()) &&
+                        t.getFullName().equals(dto.getFullName()) &&
+                        t.getExperience().equals(dto.getExperience()) &&
+                        BCrypt.checkpw(dto.getPassword(), t.getPassword())
+        ));
+    }
+
+    @Test
+    void registerTechnicianFailsOnDuplicateEmail() {
+        // Arrange
+        TechnicianRegistrationDto dto = new TechnicianRegistrationDto();
+        dto.setEmail("duptech@example.com");
+        dto.setPassword("Valid1!");
+
+        when(technicianRepository.findByEmail(dto.getEmail()))
+                .thenReturn(Optional.of(new Technician()));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.registerTechnician(dto)
+        );
+        assertTrue(ex.getMessage().contains("Email is already in use"));
+    }
+
+    @Test
+    void registerTechnicianFailsOnWeakPassword() {
+        // Arrange
+        TechnicianRegistrationDto dto = new TechnicianRegistrationDto();
+        dto.setEmail("tech2@example.com");
+        dto.setPassword("weak");
+
+        when(technicianRepository.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.registerTechnician(dto)
+        );
+        assertTrue(ex.getMessage().contains("Password must be"));
+    }
+
+    @Test
+    void changePasswordSucceedsForUser() {
+        // Arrange
+        String userId = UUID.randomUUID().toString();
+        User user = new User();
+        user.setId(UUID.fromString(userId));
+        user.setPassword(hashedPassword);
+
+        when(adminRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(technicianRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        String newPwd = "NewPass1!";
+
+        // Act
+        service.changePassword(userId, rawPassword, newPwd);
+
+        // Assert
+        verify(userRepository).save(user);
+        assertTrue(BCrypt.checkpw(newPwd, user.getPassword()));
+    }
+
+    @Test
+    void changePasswordFailsWhenUserNotFound() {
+        // Arrange
+        String userId = UUID.randomUUID().toString();
+        UUID id = UUID.fromString(userId);
+
+        when(adminRepository.findById(id)).thenReturn(Optional.empty());
+        when(technicianRepository.findById(id)).thenReturn(Optional.empty());
+        when(userRepository.findById(id)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.changePassword(userId, rawPassword, "Another1!")
+        );
+        assertTrue(ex.getMessage().contains("User not found"));
+    }
+
+    @Test
+    void changePasswordFailsOnWrongOldPassword() {
+        // Arrange
+        String userId = UUID.randomUUID().toString();
+        User user = new User();
+        user.setId(UUID.fromString(userId));
+        user.setPassword(hashedPassword);
+
+        when(adminRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(technicianRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.changePassword(userId, "WrongOld1!", "Another1!")
+        );
+        assertTrue(ex.getMessage().contains("Old password is incorrect"));
+    }
+
+    @Test
+    void changePasswordFailsOnWeakNewPassword() {
+        // Arrange
+        String userId = UUID.randomUUID().toString();
+        User user = new User();
+        user.setId(UUID.fromString(userId));
+        user.setPassword(hashedPassword);
+
+        when(adminRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(technicianRepository.findById(user.getId())).thenReturn(Optional.empty());
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.changePassword(userId, rawPassword, "weak")
+        );
+        assertTrue(ex.getMessage().contains("Password must be"));
     }
 }
