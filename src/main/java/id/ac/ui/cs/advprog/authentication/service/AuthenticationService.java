@@ -4,14 +4,14 @@ import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
 import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
 import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
 import id.ac.ui.cs.advprog.authentication.dto.UserRegistrationDto;
-import id.ac.ui.cs.advprog.authentication.model.Technician;
-import id.ac.ui.cs.advprog.authentication.model.User;
 
 public interface AuthenticationService {
 
     AuthResponse login(AuthRequest request) throws Exception;
 
-    User registerUser(UserRegistrationDto registrationDto);
+    void registerUser(UserRegistrationDto registrationDto);
 
-    Technician registerTechnician(TechnicianRegistrationDto registrationDto);
+    void registerTechnician(TechnicianRegistrationDto registrationDto);
+
+    void changePassword(String userId, String oldPassword, String newPassword);
 }
