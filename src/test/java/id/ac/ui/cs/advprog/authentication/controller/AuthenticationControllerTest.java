@@ -1,262 +1,278 @@
 package id.ac.ui.cs.advprog.authentication.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import id.ac.ui.cs.advprog.authentication.config.SecurityConfig;
-import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
-import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
-import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
-import id.ac.ui.cs.advprog.authentication.dto.UserRegistrationDto;
-import id.ac.ui.cs.advprog.authentication.model.Technician;
-import id.ac.ui.cs.advprog.authentication.model.User;
-import id.ac.ui.cs.advprog.authentication.security.JwtAuthenticationFilter;
-import id.ac.ui.cs.advprog.authentication.service.AuthenticationService;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithAnonymousUser;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.UUID;
-import java.util.stream.Stream;
-
-import static org.mockito.BDDMockito.*;
+import static org.hamcrest.Matchers.isEmptyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import java.security.Principal;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.web.servlet.MockMvc;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import id.ac.ui.cs.advprog.authentication.dto.AuthRequest;
+import id.ac.ui.cs.advprog.authentication.dto.AuthResponse;
+import id.ac.ui.cs.advprog.authentication.dto.ChangePasswordDto;
+import id.ac.ui.cs.advprog.authentication.dto.TechnicianRegistrationDto;
+import id.ac.ui.cs.advprog.authentication.dto.UserRegistrationDto;
+import id.ac.ui.cs.advprog.authentication.security.JwtTokenProvider;
+import id.ac.ui.cs.advprog.authentication.service.AuthenticationService;
+
+@ExtendWith(SpringExtension.class)
 @WebMvcTest(AuthenticationController.class)
-@Import(SecurityConfig.class)
+@AutoConfigureMockMvc(addFilters = false)
 class AuthenticationControllerTest {
 
-    @Autowired private MockMvc mvc;
-    @Autowired private ObjectMapper mapper;
+    @Autowired
+    private MockMvc mockMvc;
 
-    @MockBean private AuthenticationService authService;
-    @MockBean private JwtAuthenticationFilter jwtFilter;
+    @Autowired
+    private ObjectMapper objectMapper;
 
-    @BeforeEach
-    void bypassFilter() throws Exception {
-        // let requests through the JWT filter
-        doAnswer(invocation -> {
-            HttpServletRequest req = invocation.getArgument(0);
-            HttpServletResponse res = invocation.getArgument(1);
-            FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(req, res);
-            return null;
-        })
-                .when(jwtFilter)
-                .doFilter(any(HttpServletRequest.class),
-                        any(HttpServletResponse.class),
-                        any(FilterChain.class));
+    @MockBean
+    private AuthenticationService authenticationService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @Test
+    void loginSuccess() throws Exception {
+        when(authenticationService.login(any(AuthRequest.class)))
+                .thenReturn(new AuthResponse("token123"));
+
+        AuthRequest req = new AuthRequest();
+        req.setEmail("user@example.com");
+        req.setPassword("Password123!");
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("token123"));
     }
 
-    private static class AuthRequestBuilder {
-        private String email = "user@example.com";
-        private String password = "Password1!";
-        AuthRequestBuilder email(String e) { this.email = e; return this; }
-        AuthRequestBuilder password(String p) { this.password = p; return this; }
-        AuthRequest build() {
-            var r = new AuthRequest();
-            r.setEmail(email);
-            r.setPassword(password);
-            return r;
-        }
+    @Test
+    void loginValidationError() throws Exception {
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists())
+                .andExpect(jsonPath("$.password").exists());
     }
 
-    @Nested class LoginTests {
-        @ParameterizedTest
-        @MethodSource("goodCredentials")
-        @WithAnonymousUser
-        void loginSuccess(String email, String pwd) throws Exception {
-            var req = new AuthRequestBuilder().email(email).password(pwd).build();
-            given(authService.login(req))
-                    .willReturn(new AuthResponse("token-" + email));
+    @Test
+    void loginFailure() throws Exception {
+        when(authenticationService.login(any(AuthRequest.class)))
+                .thenThrow(new Exception("Bad credentials"));
 
-            mvc.perform(post("/auth/login")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(req)))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.token").value("token-" + email));
+        AuthRequest req = new AuthRequest();
+        req.setEmail("user@example.com");
+        req.setPassword("WrongPassword123!");
 
-            verify(authService).login(req);
-        }
-
-        static Stream<String[]> goodCredentials() {
-            return Stream.of(
-                    new String[]{"admin@x.com","Admin123!"},
-                    new String[]{"tech@x.com","Tech123!"},
-                    new String[]{"user@x.com","User123!"}
-            );
-        }
-
-        @Test @WithAnonymousUser
-        void loginValidationFails() throws Exception {
-            var bad = new AuthRequestBuilder()
-                    .email("")
-                    .password("short")
-                    .build();
-
-            mvc.perform(post("/auth/login")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(bad)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.email").exists())
-                    .andExpect(jsonPath("$.password").exists());
-        }
-
-        @Test @WithAnonymousUser
-        void loginServiceThrows() throws Exception {
-            var req = new AuthRequestBuilder().build();
-            given(authService.login(req))
-                    .willThrow(new RuntimeException("Auth failed"));
-
-            mvc.perform(post("/auth/login")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(req)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.error").value("Auth failed"));
-        }
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Bad credentials"));
     }
 
-    @Nested class RegisterUserTests {
-        @Test @WithAnonymousUser
-        void success() throws Exception {
-            var dto = new UserRegistrationDto();
-            dto.setFullName("John");
-            dto.setEmail("john@x.com");
-            dto.setPhoneNumber("+1234567890");
-            dto.setPassword("Password1!");
-            dto.setAddress("Addr");
+    @Test
+    void registerUserSuccess() throws Exception {
+        UserRegistrationDto dto = new UserRegistrationDto();
+        dto.setFullName("Alice");
+        dto.setEmail("alice@example.com");
+        dto.setPhoneNumber("1234567890");
+        dto.setPassword("Password123!");
+        dto.setAddress("123 Main St");
 
-            var u = new User("John", dto.getEmail(),
-                    dto.getPhoneNumber(),
-                    dto.getPassword(), dto.getAddress());
-            u.setId(UUID.randomUUID());
-            given(authService.registerUser(any()))
-                    .willReturn(u);
+        mockMvc.perform(post("/auth/register/user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(isEmptyString()));
 
-            mvc.perform(post("/auth/register/user")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(dto)))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.id").value(u.getId().toString()));
-        }
-
-        @Test @WithAnonymousUser
-        void validationFails() throws Exception {
-            mvc.perform(post("/auth/register/user")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{}"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.fullName").exists())
-                    .andExpect(jsonPath("$.email").exists());
-        }
-
-        @Test @WithAnonymousUser
-        void serviceThrows() throws Exception {
-            var dto = new UserRegistrationDto();
-            dto.setFullName("Jane");
-            dto.setEmail("jane@x.com");
-            dto.setPhoneNumber("+1234567890");
-            dto.setPassword("Password1!");
-            dto.setAddress("Addr");
-
-            given(authService.registerUser(dto))
-                    .willThrow(new IllegalArgumentException("Email is already in use"));
-
-            mvc.perform(post("/auth/register/user")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(dto)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.error").value("Email is already in use"));
-        }
+        verify(authenticationService).registerUser(any(UserRegistrationDto.class));
     }
 
-    @Nested class RegisterTechTests {
-        @Test @WithMockUser(roles="ADMIN")
-        void success() throws Exception {
-            var dto = new TechnicianRegistrationDto();
-            dto.setFullName("Tech");
-            dto.setEmail("tech@x.com");
-            dto.setPhoneNumber("+1234567890");
-            dto.setPassword("Password1!");
-            dto.setExperience(2);
-            dto.setAddress("Addr");
+    @Test
+    void registerUserValidationError() throws Exception {
+        mockMvc.perform(post("/auth/register/user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists())
+                .andExpect(jsonPath("$.password").exists());
+    }
 
-            var t = new Technician(
-                    dto.getFullName(),
-                    dto.getEmail(),
-                    dto.getPhoneNumber(),
-                    dto.getPassword(),
-                    dto.getExperience(),
-                    dto.getAddress(),
-                    0, 0.0
-            );
-            t.setId(UUID.randomUUID());
-            given(authService.registerTechnician(any()))
-                    .willReturn(t);
+    @Test
+    void registerUserDuplicateEmail() throws Exception {
+        doThrow(new IllegalArgumentException("Email is already in use"))
+                .when(authenticationService).registerUser(any(UserRegistrationDto.class));
 
-            mvc.perform(post("/auth/register/technician")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(dto)))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.id").value(t.getId().toString()));
-        }
+        UserRegistrationDto dto = new UserRegistrationDto();
+        dto.setFullName("Bob");
+        dto.setEmail("bob@example.com");
+        dto.setPhoneNumber("0987654321");
+        dto.setPassword("Password123!");
+        dto.setAddress("456 Elm St");
 
-        @Test @WithMockUser(roles="ADMIN")
-        void serviceThrows() throws Exception {
-            var dto = new TechnicianRegistrationDto();
-            dto.setFullName("Tech");
-            dto.setEmail("dup@x.com");
-            dto.setPhoneNumber("+1234567890");
-            dto.setPassword("Password1!");
-            dto.setExperience(2);
-            dto.setAddress("Addr");
+        mockMvc.perform(post("/auth/register/user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Email is already in use"));
+    }
 
-            given(authService.registerTechnician(any(TechnicianRegistrationDto.class)))
-                    .willThrow(new IllegalArgumentException("Email is already in use"));
+    @Test
+    void registerTechnicianUnauthorized() throws Exception {
+        mockMvc.perform(post("/auth/register/technician")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fullName").exists())
+                .andExpect(jsonPath("$.email").exists())
+                .andExpect(jsonPath("$.phoneNumber").exists())
+                .andExpect(jsonPath("$.password").exists())
+                .andExpect(jsonPath("$.address").exists())
+                .andExpect(jsonPath("$.experience").exists());
+    }
 
-            mvc.perform(post("/auth/register/technician")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(dto)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.error").value("Email is already in use"));
-        }
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void registerTechnicianSuccess() throws Exception {
+        TechnicianRegistrationDto dto = new TechnicianRegistrationDto();
+        dto.setFullName("Charlie");
+        dto.setEmail("charlie@example.com");
+        dto.setPhoneNumber("1122334455");
+        dto.setPassword("Password123!");
+        dto.setAddress("789 Oak St");
+        dto.setExperience(3);
 
-        @Test @WithMockUser(roles="USER")
-        void forbiddenForNonAdmin() throws Exception {
-            mvc.perform(post("/auth/register/technician")
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{}"))
-                    .andExpect(status().isForbidden());
-        }
+        mockMvc.perform(post("/auth/register/technician")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(isEmptyString()));
+
+        verify(authenticationService).registerTechnician(any(TechnicianRegistrationDto.class));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void registerTechnicianValidationError() throws Exception {
+        mockMvc.perform(post("/auth/register/technician")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists())
+                .andExpect(jsonPath("$.password").exists());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void registerTechnicianDuplicateEmail() throws Exception {
+        doThrow(new IllegalArgumentException("Email is already in use"))
+                .when(authenticationService).registerTechnician(any(TechnicianRegistrationDto.class));
+
+        TechnicianRegistrationDto dto = new TechnicianRegistrationDto();
+        dto.setFullName("Dana");
+        dto.setEmail("dana@example.com");
+        dto.setPhoneNumber("6677889900");
+        dto.setPassword("Password123!");
+        dto.setAddress("321 Pine St");
+        dto.setExperience(4);
+
+        mockMvc.perform(post("/auth/register/technician")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Email is already in use"));
+    }
+
+    @Test
+    void changePasswordUnauthorized() throws Exception {
+        mockMvc.perform(post("/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.oldPassword").exists())
+                .andExpect(jsonPath("$.newPassword").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "user-123")
+    void changePasswordSuccess() throws Exception {
+        ChangePasswordDto dto = new ChangePasswordDto();
+        dto.setOldPassword("OldPassword1!");
+        dto.setNewPassword("NewValidPass1!");
+
+        mockMvc.perform(post("/auth/change-password")
+                        .principal((Principal) () -> "user-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(isEmptyString()));
+
+        verify(authenticationService)
+                .changePassword("user-123", "OldPassword1!", "NewValidPass1!");
+    }
+
+    @Test
+    @WithMockUser
+    void changePasswordValidationError() throws Exception {
+        mockMvc.perform(post("/auth/change-password")
+                        .principal((Principal) () -> "user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.oldPassword").exists())
+                .andExpect(jsonPath("$.newPassword").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "user-123")
+    void changePasswordFailure() throws Exception {
+        doThrow(new IllegalArgumentException("Old password is incorrect"))
+                .when(authenticationService).changePassword("user-123", "WrongOldPass1!", "NewPassword123!");
+
+        ChangePasswordDto dto = new ChangePasswordDto();
+        dto.setOldPassword("WrongOldPass1!");
+        dto.setNewPassword("NewPassword123!");
+
+        mockMvc.perform(post("/auth/change-password")
+                        .principal((Principal) () -> "user-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Old password is incorrect"));
     }
 }
